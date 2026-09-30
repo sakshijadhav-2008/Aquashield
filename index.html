@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AquaShield — IoT Electrical Leakage Detection System | CEP Project</title>
+<style>
+:root{
+  --bg:#0c1826; --panel:#132538; --panel2:#0f1e2e;
+  --line:#22384f; --text:#e7eef5; --muted:#7d93a8;
+  --safe:#3fcf8e; --warn:#ff6b4a; --amber:#f5a623;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;}
+.led-row{display:flex;align-items:center;gap:12px;margin:14px 0 4px;padding:12px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;}
+.led-dot{width:20px;height:20px;border-radius:50%;background:#173322;box-shadow:inset 0 0 4px #000;transition:background .15s,box-shadow .15s;}
+.led-dot.on-safe{background:var(--safe);box-shadow:0 0 10px 3px var(--safe),inset 0 0 3px #063;}
+.led-dot.on-alert{background:var(--warn);box-shadow:0 0 12px 4px var(--warn),inset 0 0 3px #500;animation:ledBlink .35s steps(1) infinite;}
+@keyframes ledBlink{0%,49%{opacity:1;}50%,100%{opacity:.15;}}
+.led-label{font-size:.85rem;color:var(--muted);}
+.led-label b{color:var(--text);}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,-apple-system,sans-serif;min-height:100%;}
+button{background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:9px 16px;border-radius:4px;font-size:.85rem;cursor:pointer;}
+button:hover{border-color:var(--amber);}
+button.primary{background:var(--amber);color:#1a1206;border-color:var(--amber);font-weight:600;}
+button.primary:hover{opacity:.9;}
+button.danger{border-color:var(--warn);color:var(--warn);}
+input,select{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:9px 10px;font-size:.9rem;width:100%;}
+input[type=range]{accent-color:var(--amber);padding:0;}
+label{font-size:.8rem;color:var(--muted);display:block;margin-bottom:6px;}
+
+/* ---- Login ---- */
+#loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:32px;max-width:340px;width:100%;}
+.login-card h1{font-size:1.3rem;margin:0 0 4px;}
+.login-card p{color:var(--muted);font-size:.85rem;margin:0 0 20px;}
+.login-card .field{margin-bottom:14px;}
+.login-card button{width:100%;margin-top:6px;padding:11px;}
+
+/* ---- App shell ---- */
+#appShell{display:none;min-height:100vh;}
+.sidebar{width:190px;background:var(--panel);border-right:1px solid var(--line);padding:20px 14px;flex-shrink:0;}
+.sidebar .brand{font-weight:800;margin-bottom:26px;padding-left:6px;font-size:1.5rem;letter-spacing:.5px;text-shadow:0 0 18px rgba(63,207,142,.35);}
+.sidebar .brand span{background:linear-gradient(90deg,var(--amber),#ffd27a);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.navbtn{display:block;width:100%;text-align:left;background:none;border:none;color:var(--muted);padding:9px 10px;border-radius:4px;margin-bottom:2px;font-size:.87rem;cursor:pointer;}
+.navbtn:hover{background:var(--panel2);color:var(--text);}
+.navbtn.active{background:var(--panel2);color:var(--amber);font-weight:600;}
+#appShell{display:none;}
+.shell-inner{display:flex;min-height:100vh;}
+.main{flex:1;padding:24px 28px 40px;max-width:920px;}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+.topbar h2{margin:0;font-size:1.2rem;}
+.badge{padding:6px 14px;border-radius:3px;font-size:.8rem;font-weight:600;border:1px solid var(--line);}
+.badge.safe{color:var(--safe);border-color:var(--safe);}
+.badge.alert{color:var(--warn);border-color:var(--warn);background:rgba(255,107,74,.08);}
+.view{display:none;}
+.view.active{display:block;}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:20px;margin-bottom:16px;}
+.panel h3{font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 14px;font-weight:600;}
+.grid2{display:grid;grid-template-columns:1.1fr 1fr;gap:16px;}
+@media (max-width:820px){.grid2{grid-template-columns:1fr;} .shell-inner{flex-direction:column;} .sidebar{width:100%;display:flex;align-items:center;gap:6px;overflow-x:auto;padding:12px;} .sidebar .brand{margin:0 10px 0 0;}  .navbtn{white-space:nowrap;width:auto;}}
+
+.meter{display:flex;align-items:baseline;gap:10px;margin-bottom:6px;}
+.meter .val{font-size:2.6rem;font-variant-numeric:tabular-nums;font-weight:700;line-height:1;}
+.meter .unit{color:var(--muted);font-size:.9rem;}
+.meter-bar{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin:14px 0 4px;}
+.meter-fill{height:100%;background:var(--safe);width:0%;transition:width .3s ease,background .3s ease;}
+.meter-labels{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);}
+svg.spark{display:block;width:100%;height:70px;margin-top:14px;}
+.controls{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;}
+
+.phone-wrap{display:flex;justify-content:center;padding:10px 0 4px;}
+.phone{width:230px;height:470px;background:#0a0a0c;border-radius:34px;padding:10px;box-shadow:0 0 0 2px #2a2c30,0 14px 34px rgba(0,0,0,.55);position:relative;}
+.phone .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:100px;height:22px;background:#0a0a0c;border-radius:0 0 14px 14px;z-index:3;}
+.phone .screen{width:100%;height:100%;background:linear-gradient(180deg,#1b3a52,#0c1826 55%);border-radius:26px;overflow:hidden;position:relative;display:flex;flex-direction:column;}
+.phone .statusbar{display:flex;justify-content:space-between;align-items:center;padding:14px 18px 0;font-size:.62rem;color:#eaf2f8;font-weight:600;letter-spacing:.3px;}
+.phone .clock{margin-top:46px;text-align:center;color:#fff;}
+.phone .clock .time{font-size:2.1rem;font-weight:300;letter-spacing:1px;}
+.phone .clock .date{font-size:.68rem;color:#c3d3e0;margin-top:2px;}
+.phone .notif-stack{padding:18px 12px;margin-top:auto;margin-bottom:26px;}
+.notif{background:rgba(28,42,56,.92);backdrop-filter:blur(6px);border-radius:14px;padding:11px 12px;font-size:.78rem;opacity:0;transform:translateY(-14px) scale(.97);transition:all .4s cubic-bezier(.2,.8,.3,1);border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 16px rgba(0,0,0,.35);}
+.notif.show{opacity:1;transform:translateY(0) scale(1);}
+.notif .nhead{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.notif .nicon{width:16px;height:16px;border-radius:4px;background:var(--amber);display:flex;align-items:center;justify-content:center;font-size:.6rem;flex-shrink:0;}
+.notif .napp{font-size:.62rem;color:#a9bccb;letter-spacing:.4px;text-transform:uppercase;}
+.notif .ntime{font-size:.62rem;color:#8298a8;margin-left:auto;}
+.notif .t{font-weight:700;color:#fff;margin-bottom:2px;}
+.notif .d{color:#c3d3e0;font-size:.74rem;line-height:1.3;}
+
+.log{max-height:260px;overflow-y:auto;font-size:.82rem;}
+.log-row{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);}
+.log-row:last-child{border-bottom:none;}
+.log-row .time{color:var(--muted);white-space:nowrap;}
+.log-row.alert .msg{color:var(--warn);}
+.log-row.safe .msg{color:var(--muted);}
+.empty{color:var(--muted);font-size:.82rem;padding:8px 0;}
+
+.devlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}
+.devcard{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px;cursor:pointer;transition:border-color .2s;}
+.devcard.selected{border-color:var(--amber);}
+.devcard .dname{font-weight:600;margin-bottom:4px;}
+.devcard .dstat{font-size:.78rem;color:var(--muted);margin-bottom:8px;}
+.devcard .ddot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+.devcard .dmeta{font-size:.72rem;color:var(--muted);border-top:1px solid var(--line);padding-top:8px;display:grid;gap:3px;}
+.devcard .dmeta span b{color:var(--text);font-weight:500;}
+
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.settings-actions{margin-top:10px;}
+.savedmsg{color:var(--safe);font-size:.82rem;margin-left:10px;opacity:0;transition:opacity .3s;}
+.savedmsg.show{opacity:1;}
+.stat-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:.88rem;}
+.stat-row:last-child{border-bottom:none;}
+.devbar-row{margin-bottom:12px;}
+.devbar-label{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-bottom:4px;}
+.devbar-track{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;}
+.devbar-fill{height:100%;background:var(--warn);}
+@media print{
+  body *{visibility:hidden;}
+  #printable, #printable *{visibility:visible;}
+  #printable{position:absolute;top:0;left:0;width:100%;background:#fff;color:#000;border:none;}
+  #printable .log-row{border-color:#ccc;}
+}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>AquaShield</h1>
+    <p>IoT Leakage Detection &amp; Alert System — sign in to your dashboard</p>
+    <div class="field"><label>Email</label><input id="loginEmail" type="text" value="sakshi@aquashield.demo"></div>
+    <div class="field"><label>Password</label><input id="loginPass" type="password" value="••••••••"></div>
+    <button class="primary" id="loginBtn">Sign in</button>
+    <p style="font-size:.72rem;color:var(--muted);margin-top:14px;">Demo login — any credentials work.</p>
+  </div>
+</div>
+
+<div id="appShell">
+  <div class="shell-inner">
+    <div class="sidebar">
+      <div class="brand">💧Aqua<span>Shield</span></div>
+      <button class="navbtn active" data-view="dashboard">Dashboard</button>
+      <button class="navbtn" data-view="devices">Devices</button>
+      <button class="navbtn" data-view="history">History</button>
+      <button class="navbtn" data-view="analytics">Analytics</button>
+      <button class="navbtn" data-view="about">System Info</button>
+      <button class="navbtn" data-view="settings">Settings</button>
+      <button class="navbtn" id="logoutBtn" style="margin-top:20px;color:var(--warn);">Log out</button>
+    </div>
+
+    <div class="main">
+      <!-- DASHBOARD -->
+      <div class="view active" id="view-dashboard">
+        <div class="topbar">
+          <h2>Dashboard — <span id="activeDeviceName">Node A</span></h2>
+          <div class="badge safe" id="statusBadge">SYSTEM SAFE</div>
+        </div>
+        <div class="grid2">
+          <div class="panel">
+            <h3>Electrode Signal</h3>
+            <div class="meter"><span class="val" id="valDisplay">0</span><span class="unit">mV (comparator output)</span></div>
+            <div class="meter-bar"><div class="meter-fill" id="meterFill"></div></div>
+            <div class="meter-labels"><span>0</span><span id="threshLabel">Threshold: 2000</span><span>4095</span></div>
+            <div class="led-row">
+              <div class="led-dot on-safe" id="ledDot"></div>
+              <div class="led-label">Onboard LED (GPIO2): <b id="ledStateText">Green — Safe</b></div>
+            </div>
+            <svg class="spark" id="spark" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
+            <div class="controls">
+              <button class="primary" id="toggleSim">Start simulation</button>
+              <button class="danger" id="triggerLeak">Simulate leakage spike</button>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Blynk-style Mobile Alert</h3>
+            <div class="phone-wrap">
+              <div class="phone">
+                <div class="notch"></div>
+                <div class="screen">
+                  <div class="statusbar"><span id="phoneClock">9:41</span><span>📶 🔋 87%</span></div>
+                  <div class="clock"><div class="time" id="phoneTime">9:41</div><div class="date">AquaShield Monitor</div></div>
+                  <div class="notif-stack">
+                    <div class="notif" id="notif">
+                      <div class="nhead"><span class="nicon">💧</span><span class="napp">AquaShield</span><span class="ntime">now</span></div>
+                      <div class="t">⚠ Leakage Detected</div>
+                      <div class="d">Electrode signal exceeded threshold. Notification sent.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <h3 style="margin-top:22px;">Recent Events</h3>
+            <div class="log" id="log"><div class="empty">No events yet — start the simulation.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DEVICES -->
+      <div class="view" id="view-devices">
+        <div class="topbar"><h2>Devices</h2></div>
+        <div class="panel">
+          <h3>Deployed Nodes</h3>
+          <div class="devlist" id="devlist"></div>
+        </div>
+      </div>
+
+      <!-- HISTORY -->
+      <div class="view" id="view-history">
+        <div class="topbar">
+          <h2>Event History</h2>
+          <button id="exportCsv">Export CSV</button>
+        </div>
+        <div class="panel">
+          <h3>All Logged Events</h3>
+          <div class="log" id="fullLog" style="max-height:420px;"><div class="empty">No events logged yet.</div></div>
+        </div>
+      </div>
+
+      <!-- ANALYTICS -->
+      <div class="view" id="view-analytics">
+        <div class="topbar">
+          <h2>Analytics &amp; Report</h2>
+          <button id="printReport">Generate printable report</button>
+        </div>
+        <div class="grid2">
+          <div class="panel">
+            <h3>Summary Statistics</h3>
+            <div class="stat-row"><span>Total events logged</span><b id="statTotal">0</b></div>
+            <div class="stat-row"><span>Leakage alerts triggered</span><b id="statAlerts" style="color:var(--warn)">0</b></div>
+            <div class="stat-row"><span>Safe-return events</span><b id="statSafe" style="color:var(--safe)">0</b></div>
+            <div class="stat-row"><span>Peak signal recorded</span><b id="statPeak">0</b> mV</div>
+            <div class="stat-row"><span>Average signal (session)</span><b id="statAvg">0</b> mV</div>
+          </div>
+          <div class="panel">
+            <h3>Alerts per Device</h3>
+            <div id="devBars"></div>
+          </div>
+        </div>
+        <div class="panel" id="printable">
+          <h3>Session Report</h3>
+          <p style="color:var(--muted);font-size:.85rem;">AquaShield — IoT-Based Electrical Leakage Detection and Alert System. Report generated <span id="reportTime"></span>.</p>
+          <div class="log" id="reportLog" style="max-height:none;"></div>
+        </div>
+      </div>
+
+      <!-- ABOUT / SYSTEM INFO -->
+      <div class="view" id="view-about">
+        <div class="topbar"><h2>System Architecture</h2></div>
+        <div class="panel">
+          <h3>Pipeline</h3>
+          <p style="font-size:.88rem;color:var(--text);line-height:1.7;">
+            Electrode sensor → <b>LM358 comparator</b> (signal conditioning) → <b>ESP32</b> (analog read + threshold logic, GPIO34) →
+            local alert (LED, GPIO2) + <b>Blynk Cloud</b> (virtual pin V0 + logEvent) → <b>push notification</b> on the Blynk mobile app.
+          </p>
+          <h3 style="margin-top:20px;">Software Layers</h3>
+          <p style="font-size:.88rem;color:var(--muted);line-height:1.7;">
+            1. <b>Firmware layer</b> — Wokwi-simulated ESP32 sketch (aquashield_blynk.ino), sensor sampling + threshold logic.<br>
+            2. <b>Cloud layer</b> — Blynk.Cloud datastream (V0) and event automation (leak_alert) for real push notifications.<br>
+            3. <b>Dashboard layer</b> — this web app: live monitoring, multi-node device view, history, analytics and settings, modeling the end-user control panel.
+          </p>
+          <h3 style="margin-top:20px;">Why software-based</h3>
+          <p style="font-size:.88rem;color:var(--muted);line-height:1.7;">Full simulation + real cloud alert pipeline demonstrates complete system logic and IoT integration without dependency on physical part availability, while remaining fully portable to real hardware (LM358 + ESP32 + electrodes) with no logic changes.</p>
+        </div>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="view" id="view-settings">
+        <div class="topbar"><h2>Settings</h2></div>
+        <div class="panel">
+          <h3>Detection</h3>
+          <div class="field-row">
+            <div><label>Alert threshold (mV)</label><input type="range" id="threshSettings" min="500" max="3800" value="2000"></div>
+            <div><label>Alert sound</label><select id="alertSound"><option>On</option><option>Off</option></select></div>
+          </div>
+          <h3 style="margin-top:18px;">Account</h3>
+          <div class="field-row">
+            <div><label>Display name</label><input id="settingsName" value="Sakshi"></div>
+            <div><label>Notification email</label><input id="settingsEmail" value="sakshi@aquashield.demo"></div>
+          </div>
+          <div class="settings-actions">
+            <button class="primary" id="saveSettings">Save changes</button>
+            <span class="savedmsg" id="savedMsg">Saved</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Login ---------- */
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='block';
+});
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  document.getElementById('appShell').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+});
+
+/* ---------- Nav ---------- */
+document.querySelectorAll('.navbtn[data-view]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.navbtn[data-view]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view==='devices') renderDevices();
+    if(btn.dataset.view==='history') renderFullLog();
+    if(btn.dataset.view==='analytics') renderAnalytics();
+  });
+});
+
+/* ---------- Devices ---------- */
+const devices = [
+  {id:'a', name:'Node A — Kitchen Line', status:'safe', location:'Sangamner, Maharashtra — Kitchen (Ground Floor)', mac:'A4:CF:12:3B:8E:01', fw:'v1.2', uptime:'2h 14m'},
+  {id:'b', name:'Node B — Bathroom Line', status:'safe', location:'Sangamner, Maharashtra — Bathroom (Ground Floor)', mac:'A4:CF:12:3B:8E:02', fw:'v1.2', uptime:'2h 14m'},
+  {id:'c', name:'Node C — Main Distribution', status:'safe', location:'Sangamner, Maharashtra — Main DB Panel', mac:'A4:CF:12:3B:8E:03', fw:'v1.2', uptime:'2h 14m'},
+];
+let activeDevice = 'a';
+
+function renderDevices(){
+  const el = document.getElementById('devlist');
+  el.innerHTML = devices.map(d=>`
+    <div class="devcard ${d.id===activeDevice?'selected':''}" data-id="${d.id}">
+      <div class="dname">${d.name}</div>
+      <div class="dstat"><span class="ddot" style="background:${d.status==='alert'?'var(--warn)':'var(--safe)'}"></span>${d.status==='alert'?'Leakage detected':'Safe'}</div>
+      <div class="dmeta">
+        <span>📍 <b>${d.location}</b></span>
+        <span>🆔 Device ID: <b>${d.mac}</b></span>
+        <span>⚙ Firmware: <b>${d.fw}</b></span>
+        <span>⏱ Uptime: <b>${d.uptime}</b></span>
+      </div>
+    </div>`).join('');
+  el.querySelectorAll('.devcard').forEach(c=>{
+    c.addEventListener('click', ()=>{
+      activeDevice = c.dataset.id;
+      document.getElementById('activeDeviceName').textContent = devices.find(d=>d.id===activeDevice).name.split(' — ')[0];
+      renderDevices();
+    });
+  });
+}
+
+/* ---------- Simulation (dashboard) ---------- */
+const valDisplay=document.getElementById('valDisplay'), meterFill=document.getElementById('meterFill'),
+      ledDot=document.getElementById('ledDot'), ledStateText=document.getElementById('ledStateText'),
+      statusBadge=document.getElementById('statusBadge'), threshLabel=document.getElementById('threshLabel'),
+      toggleBtn=document.getElementById('toggleSim'), triggerBtn=document.getElementById('triggerLeak'),
+      logEl=document.getElementById('log'), notif=document.getElementById('notif'), spark=document.getElementById('spark'),
+      threshSettings=document.getElementById('threshSettings');
+
+let threshold = 2000;
+let running=false, timer=null, current=300, spikeFrames=0, history_=new Array(60).fill(300), wasAlert=false;
+let allEvents = [];
+let peakSignal = 0, sumSignal = 0, sampleCount = 0;
+let deviceAlertCounts = {a:0, b:0, c:0};
+
+function fmtTime(){ return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+
+/* ---------- Alert Sound (acts like a continuous buzzer) ---------- */
+let audioCtx = null;
+let alarmInterval = null;
+
+function beepOnce(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 1000;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }catch(e){ console.error('audio error', e); }
+}
+
+function startAlarm(){
+  if(alarmInterval) return;   // already running
+  beepOnce();
+  alarmInterval = setInterval(beepOnce, 400);   // keeps beeping every 0.4s
+}
+
+function stopAlarm(){
+  if(alarmInterval){ clearInterval(alarmInterval); alarmInterval = null; }
+}
+
+function addLog(msg, isAlert){
+  allEvents.unshift({msg, isAlert, time: fmtTime()});
+  if(logEl.querySelector('.empty')) logEl.innerHTML='';
+  const row=document.createElement('div');
+  row.className='log-row '+(isAlert?'alert':'safe');
+  row.innerHTML=`<span class="msg">${msg}</span><span class="time">${fmtTime()}</span>`;
+  logEl.prepend(row);
+  renderFullLog();
+}
+function renderFullLog(){
+  const el=document.getElementById('fullLog');
+  if(allEvents.length===0){ el.innerHTML='<div class="empty">No events logged yet.</div>'; return; }
+  el.innerHTML = allEvents.map(e=>`<div class="log-row ${e.isAlert?'alert':'safe'}"><span class="msg">${e.msg}</span><span class="time">${e.time}</span></div>`).join('');
+}
+
+function updateSpark(){
+  const w=300,h=70,max=4095, step=w/(history_.length-1);
+  const pts=history_.map((v,i)=>`${(i*step).toFixed(1)},${(h-(v/max)*h).toFixed(1)}`).join(' ');
+  const th=h-(threshold/max)*h;
+  spark.innerHTML=`<line x1="0" y1="${th}" x2="${w}" y2="${th}" stroke="var(--amber)" stroke-width="1" stroke-dasharray="4 4" opacity="0.6"/>
+    <polyline points="${pts}" fill="none" stroke="${current>threshold?'var(--warn)':'var(--safe)'}" stroke-width="2"/>`;
+}
+
+function tick(){
+  if(spikeFrames>0){ current += (2600-current)*0.5 + (Math.random()*200-100); spikeFrames--; }
+  else{
+    current += (Math.random()*160-80);
+    current = Math.max(150, Math.min(1400, current));
+    if(Math.random()<0.02) spikeFrames=8;
+  }
+  current = Math.max(0, Math.min(4095, current));
+  history_.push(current); history_.shift();
+
+  valDisplay.textContent = Math.round(current);
+  meterFill.style.width = Math.min(100,(current/4095)*100)+'%';
+  const isAlert = current > threshold;
+  meterFill.style.background = isAlert?'var(--warn)':'var(--safe)';
+  valDisplay.style.color = isAlert?'var(--warn)':'var(--text)';
+  statusBadge.textContent = isAlert?'LEAKAGE DETECTED':'SYSTEM SAFE';
+  statusBadge.className = 'badge '+(isAlert?'alert':'safe');
+  ledDot.className = 'led-dot '+(isAlert?'on-alert':'on-safe');
+  ledStateText.textContent = isAlert?'Red — Blinking fast (Leak!)':'Green — Safe';
+
+  const dev = devices.find(d=>d.id===activeDevice);
+  dev.status = isAlert ? 'alert' : 'safe';
+
+  if(isAlert && !wasAlert){
+    addLog('Leakage detected — alert triggered ('+dev.name+')', true);
+    notif.classList.add('show');
+    setTimeout(()=>notif.classList.remove('show'), 3200);
+    deviceAlertCounts[activeDevice] = (deviceAlertCounts[activeDevice]||0) + 1;
+  } else if(!isAlert && wasAlert){
+    addLog('Signal returned to safe range ('+dev.name+')', false);
+  }
+
+  if(isAlert) startAlarm(); else stopAlarm();
+  wasAlert = isAlert;
+
+  peakSignal = Math.max(peakSignal, current);
+  sumSignal += current; sampleCount++;
+
+  updateSpark();
+}
+
+function renderAnalytics(){
+  document.getElementById('statTotal').textContent = allEvents.length;
+  document.getElementById('statAlerts').textContent = allEvents.filter(e=>e.isAlert).length;
+  document.getElementById('statSafe').textContent = allEvents.filter(e=>!e.isAlert).length;
+  document.getElementById('statPeak').textContent = Math.round(peakSignal);
+  document.getElementById('statAvg').textContent = sampleCount ? Math.round(sumSignal/sampleCount) : 0;
+
+  const maxCount = Math.max(1, ...Object.values(deviceAlertCounts));
+  document.getElementById('devBars').innerHTML = devices.map(d=>{
+    const c = deviceAlertCounts[d.id]||0;
+    return `<div class="devbar-row"><div class="devbar-label"><span>${d.name}</span><span>${c}</span></div>
+      <div class="devbar-track"><div class="devbar-fill" style="width:${(c/maxCount)*100}%"></div></div></div>`;
+  }).join('');
+
+  document.getElementById('reportTime').textContent = new Date().toLocaleString();
+  const rl = document.getElementById('reportLog');
+  rl.innerHTML = allEvents.length ? allEvents.map(e=>`<div class="log-row ${e.isAlert?'alert':'safe'}"><span class="msg">${e.msg}</span><span class="time">${e.time}</span></div>`).join('') : '<div class="empty">No events logged yet.</div>';
+}
+
+document.getElementById('printReport').addEventListener('click', ()=>{ renderAnalytics(); window.print(); });
+document.getElementById('exportCsv').addEventListener('click', async ()=>{
+  let csv = 'Time,Event,Type\n';
+  allEvents.forEach(e=>{ csv += `${e.time},"${e.msg}",${e.isAlert?'ALERT':'SAFE'}\n`; });
+  try{
+    const downloads = await claude.use("downloads");
+    if(downloads){
+      await downloads.save({filename:'aquashield_event_log.csv', data:csv});
+    } else {
+      alert('Downloads are not available in this view. Try opening the artifact directly.');
+    }
+  }catch(e){ console.error(e); }
+});
+
+function start(){ running=true; toggleBtn.textContent='Stop simulation'; toggleBtn.classList.remove('primary'); addLog('Simulation started', false); timer=setInterval(tick,500); }
+function stop(){ running=false; toggleBtn.textContent='Start simulation'; toggleBtn.classList.add('primary'); clearInterval(timer); stopAlarm(); }
+
+function unlockAudio(){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }catch(e){}
+}
+toggleBtn.addEventListener('click', ()=>{ unlockAudio(); running?stop():start(); });
+triggerBtn.addEventListener('click', ()=>{ unlockAudio(); spikeFrames=10; if(!running) start(); });
+
+/* ---------- Settings ---------- */
+threshSettings.addEventListener('input', ()=>{ threshold=parseInt(threshSettings.value,10); threshLabel.textContent='Threshold: '+threshold; updateSpark(); });
+document.getElementById('saveSettings').addEventListener('click', ()=>{
+  const m=document.getElementById('savedMsg'); m.classList.add('show'); setTimeout(()=>m.classList.remove('show'),1500);
+});
+
+updateSpark();
+renderDevices();
+function updatePhoneClock(){
+  const t = new Date();
+  let h = t.getHours(), m = t.getMinutes();
+  const ampm = h>=12?'PM':'AM'; h = h%12 || 12;
+  const str = h+':'+String(m).padStart(2,'0');
+  const pc = document.getElementById('phoneClock'), pt = document.getElementById('phoneTime');
+  if(pc) pc.textContent = str;
+  if(pt) pt.textContent = str+' '+ampm;
+}
+updatePhoneClock();
+setInterval(updatePhoneClock, 30000);
+</script>
+</body>
+</html>
